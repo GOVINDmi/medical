@@ -1,0 +1,11 @@
+.custom-input-wrapper {
+    position: relative;
+    padding: 8px;
+    background-color: #fff;
+}
+
+.custom-buttons {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+}

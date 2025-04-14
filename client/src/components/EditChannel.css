@@ -1,0 +1,10 @@
+.current-members,
+.available-users {
+  margin-top: 10px;
+}
+
+.current-members p,
+.available-users p {
+  font-weight: bold;
+  margin-bottom: 6px;
+}
