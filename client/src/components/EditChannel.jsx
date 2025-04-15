@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useChatContext } from 'stream-chat-react';
-import axios from 'axios';
-import { UserList } from './';
 import { CloseCreateChannel } from '../assets';
-import './EditChannel.css'
+import './EditChannel.css';
 
 const ChannelNameInput = ({ channelName = '', setChannelName }) => {
   const handleChange = (event) => {
@@ -26,18 +24,17 @@ const EditChannel = ({ setIsEditing }) => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [otherUsers, setOtherUsers] = useState([]);
   const [currentMembers, setCurrentMembers] = useState([]);
+  const [menuOpenFor, setMenuOpenFor] = useState(null);
+ 
+  const currentUserRole = channel.state.members[client.userID]?.role;
 
   useEffect(() => {
     const fetchUsers = async () => {
       const allUsers = await client.queryUsers({ id: { $ne: client.userID } });
-
-      const channelMemberIDs = Object.keys(channel.state.members);
+      const memberIDs = Object.keys(channel.state.members);
       setCurrentMembers(Object.values(channel.state.members));
-
-      const filtered = allUsers.users.filter(
-        (u) => !channelMemberIDs.includes(u.id)
-      );
-      setOtherUsers(filtered);
+      const nonMembers = allUsers.users.filter((u) => !memberIDs.includes(u.id));
+      setOtherUsers(nonMembers);
     };
 
     fetchUsers();
@@ -46,57 +43,72 @@ const EditChannel = ({ setIsEditing }) => {
   const updateChannel = async (event) => {
     event.preventDefault();
 
-    const nameChanged = channelName !== (channel.data.name || channel.data.id);
-
-    if (nameChanged) {
-      await channel.update({ name: channelName }, {
-        text: `Channel name changed to ${channelName}`
-      });
+    if (currentUserRole !== 'owner') {
+      return alert('Only owners can edit the channel.');
     }
 
+    const nameChanged = channelName !== (channel.data.name || channel.data.id);
+
     try {
-        console.log(selectedUsers,channel.id);
-        if (selectedUsers.length) {
-          const res = await axios.post('https://medical-pager-n1gy.onrender.com/api/add-member', {
-            channelId: channel.id,
-            userId: selectedUsers,
-          });
-      
-          console.log('Members added:', res.data); // ✅ See what server returns
-        }
-      
-        if (nameChanged) {
-          await channel.update(
-            { name: channelName },
-            { text: `Channel name changed to ${channelName}` }
-          );
-        }
-      
-        setIsEditing(false);
-        setSelectedUsers([]);
-      } catch (err) {
-        console.error('Failed to update channel:', err);
-      
-        const msg =
-          err?.response?.data?.message ||
-          err?.message ||
-          'Something went wrong adding members.';
-      
-        alert(`Failed to update channel: ${msg}`);
+      if (nameChanged) {
+        await channel.update({ name: channelName }, { text: `Channel name changed to ${channelName}` });
       }
 
-    setChannelName(null);
-    setIsEditing(false);
-    setSelectedUsers([]);
+      if (selectedUsers.length) {
+        await channel.addMembers(
+          selectedUsers.map((userId) => ({
+            user_id: userId,
+            role: 'member'
+          }))
+        );
+      
+        for (const userId of selectedUsers) {
+            const addedUser = otherUsers.find((u) => u.id === userId);
+            await channel.sendMessage({
+              text: `${client.user.name || client.user.id} added ${addedUser?.fullName || userId} to the channel.`,
+                custom_type: 'system_notice',
+                type: 'regular',   
+            });
+        }
+      }
+      
+
+      setChannelName('');
+      setSelectedUsers([]);
+      setIsEditing(false);
+    } catch (err) {
+      alert('Failed to update channel: ' + (err.message || 'Unknown error'));
+    }
   };
 
   const handleSelectUser = (userId) => {
     setSelectedUsers((prev) =>
-      prev.includes(userId)
-        ? prev.filter((id) => id !== userId)
-        : [...prev, userId]
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
   };
+  const removeMember = async (userId) => {
+    if (currentUserRole !== 'admin' && currentUserRole !== 'owner') {
+      return alert('Only admins or owners can remove members.');
+    }
+  
+    try {
+      const removedUser = currentMembers.find((m) => m.user.id === userId)?.user;
+  
+      await channel.sendMessage({
+        text: `${client.user.name || client.user.id} removed ${removedUser?.fullName || userId} from the channel.`,
+          custom_type: 'system_notice',
+          type: 'regular',   
+      });
+  
+      await channel.removeMembers([userId]);
+      window.location.reload();
+    } catch (err) {
+      alert('Failed to remove member: ' + (err.message || 'Unknown error'));
+    }
+  };
+  
+  
+  
 
   return (
     <div className="edit-channel__container">
@@ -112,80 +124,33 @@ const EditChannel = ({ setIsEditing }) => {
           <div className="current-members">
             <p>Current Members:</p>
             {currentMembers.map(({ user }) => (
-                <div
-                key={user.id}
-                style={{
-                    margin: '6px 0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                }}
-                >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {/* ✅ Avatar or fallback */}
-                    <div
-                    style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        backgroundColor: '#d4d4d4',
-                        color: '#222',
-                        fontWeight: 'bold',
-                        fontSize: '14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden',
-                    }}
-                    >
+              <div key={user.id} className="member-row">
+                <div className="member-info">
+                  <div className="avatar">
                     {user.image ? (
-                        <img
-                        src={user.image}
-                        alt={user.fullName || user.id}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
+                      <img src={user.image} alt={user.fullName || user.id} />
                     ) : (
-                        <span>{(user.fullName || user.id)?.[0]?.toUpperCase()}</span>
+                      <span className="avatar-letter">{(user.fullName || user.id)?.[0]?.toUpperCase()}</span>
                     )}
-                    </div>
-
-                    {/* ✅ Name */}
-                    <span>{user.fullName || user.id}</span>
+                  </div>
+                  <span className="member-name">{user.fullName || user.id}</span>
                 </div>
 
-                {/* ✅ Remove button (if not self) */}
-                {user.id !== client.userID && (
-                    <button
-                    onClick={async () => {
-                        try {
-                        await axios.post('https://medical-pager-n1gy.onrender.com/api/remove-member', {
-                            channelId: channel.id,
-                            userId: user.id,
-                        });
-                        window.location.reload();
-                        } catch (err) {
-                        alert(
-                            'Failed to remove member: ' +
-                            (err.response?.data?.message || err.message)
-                        );
-                        }
-                    }}
-                    style={{
-                        backgroundColor: '#ff4d4f',
-                        color: 'white',
-                        border: 'none',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                    }}
-                    >
-                    Remove
+                {user.id !== client.userID && (currentUserRole === 'admin' || currentUserRole === 'owner') && (
+                  <div className="menu-wrapper">
+                    <button onClick={() => setMenuOpenFor(menuOpenFor === user.id ? null : user.id)}>
+                      ⋮
                     </button>
+                    {menuOpenFor === user.id && (
+                      <div className="dropdown-menu">
+                        <button onClick={() => removeMember(user.id)}>Remove</button>
+                      </div>
+                    )}
+                  </div>
                 )}
-                </div>
+              </div>
             ))}
-            </div>
-
+          </div>
 
           <div className="available-users">
             <p>Available Users to Add:</p>
@@ -208,6 +173,8 @@ const EditChannel = ({ setIsEditing }) => {
       <div className="edit-channel__button-wrapper" onClick={updateChannel}>
         <p>Save Changes</p>
       </div>
+
+     
     </div>
   );
 };

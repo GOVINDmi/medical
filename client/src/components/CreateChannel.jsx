@@ -29,10 +29,22 @@ const CreateChannel = ({ createType, setIsCreating }) => {
         e.preventDefault();
 
         try {
-            const newChannel = await client.channel(createType, channelName, {
+            var newChannel = await client.channel(createType, channelName, {
                 name: channelName, members: selectedUsers
             });
+            if(createType === 'team')
+            {
+                    newChannel = await client.channel(createType, channelName, {
+                    name: channelName,
+                    members: selectedUsers.map((id) => ({
+                      user_id: id,
+                      role: id === client.userID ? 'admin' : 'member'  // ✅ Assign roles
+                    })),
+                    created_by_id: client.userID // ✅ Required for server-side channel creation
+                  });
+            }
 
+           
             await newChannel.watch();
 
             setChannelName('');

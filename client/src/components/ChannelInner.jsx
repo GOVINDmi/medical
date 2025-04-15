@@ -13,6 +13,18 @@ import {
 import { ChannelInfo } from '../assets';
 
 export const GiphyContext = React.createContext({});
+const CustomMessage = ({ message }) => {
+    if (message.custom_type === 'system_notice') {
+      return (
+        <div className="system-message">
+          <p>{message.text}</p>
+        </div>
+      );
+    }
+  
+    return null; // fallback to default rendering
+  };
+  
 
 const ChannelInner = ({ setIsEditing }) => {
     const [giphyState, setGiphyState] = useState(false);
@@ -42,7 +54,22 @@ const ChannelInner = ({ setIsEditing }) => {
             <div style={{ display: 'flex', width: '100%', color: 'black' }}>
                 <Window>
                     <TeamChannelHeader setIsEditing={setIsEditing} />
-                    <MessageList />
+                    <MessageList
+                    messageRenderer={(messageProps) => {
+                        const { message } = messageProps;
+                        const customType = message.custom_type || message?.raw?.custom_type;
+
+                        if (customType === 'system_notice') {
+                        return <CustomMessage message={message} />;
+                        }
+
+                        // let Stream handle the default messages
+                        return <MessageList.Message message={message} {...messageProps} />;
+                    }}
+                    />
+
+
+
                     <MessageInput
                         overrideSubmitHandler={overrideSubmitHandler}
                         additionalTextareaProps={{ placeholder: giphyState ? 'Send a giphy...' : 'Type your message...' }}
